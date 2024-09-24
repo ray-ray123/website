@@ -53,20 +53,6 @@
             position: relative;
         }
 
-        h1:before {
-            content: url('https://via.placeholder.com/50'); /* Replace with a relevant icon */
-            position: absolute;
-            left: -60px;
-            top: 0;
-        }
-
-        h1:after {
-            content: url('https://via.placeholder.com/50'); /* Another icon on the right */
-            position: absolute;
-            right: -60px;
-            top: 0;
-        }
-    
         /* Input styles */
         .input-container {
             margin-bottom: 20px;
@@ -116,16 +102,6 @@
         button:hover {
             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
         }
-
-        /* Icons for buttons */
-        button i {
-            margin-right: 10px;
-        }
-    
-        /* Back button style */
-        .back-button {
-            background-color: #f44336;
-        }
     
         /* Logged in message */
         #loggedInMessage {
@@ -146,62 +122,26 @@
             color: #333;
         }
     
-        /* Transaction list */
-        .transaction-list {
-            font-family: 'Merriweather', serif;
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
-            max-height: 200px;
-            overflow-y: auto;
+        /* Show/Hide Button */
+        .toggle-button {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #4CAF50;
+            cursor: pointer;
         }
-    
-        .transaction {
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-            transition: background-color 0.3s;
-        }
-    
-        .transaction:hover {
-            background-color: #f9f9f9;
-        }
-    
-        /* Confirmation message */
-        .confirmation-message {
+
+        /* Routing number display */
+        #routingNumberDisplay {
+            display: none; /* Initially hidden */
             font-family: 'Poppins', sans-serif;
-            color: #fdd835;
-            margin: 15px 0;
-            display: none;
+            margin-top: 10px;
             text-align: center;
-        }
-    
-        /* Scrollbar Styling for Transaction List */
-        .transaction-list::-webkit-scrollbar {
-            width: 6px;
-        }
-    
-        .transaction-list::-webkit-scrollbar-thumb {
-            background-color: #4CAF50;
-            border-radius: 6px;
-        }
-    
-        .transaction-list::-webkit-scrollbar-track {
-            background: #f0f0f0;
+            color: #4CAF50;
         }
     </style>
-
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-    <script type="text/javascript">
-        (function(){
-            emailjs.init({
-                publicKey: "IqX1JlkCB1GL-tFVm",
-            });
-        })();
-    </script>
-    <!-- Firebase App (the core Firebase SDK) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-app.js";
-        import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js";
+        import { getStorage, ref, uploadString, getDownloadURL, listAll } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js";
 
         // Firebase configuration
         const firebaseConfig = {
@@ -218,36 +158,26 @@
         const app = initializeApp(firebaseConfig);
         const storage = getStorage(app);
 
-        function update() {
-            console.log("updated");
-            
-        }
-
-        // Simulate Unity's update function using setInterval
-        setInterval(update, 500); // Call update every 5 seconds
-
-        
-        // Custom Account Logic
         document.addEventListener('DOMContentLoaded', () => {
             const email = localStorage.getItem('userEmail');
             const password = localStorage.getItem('userPassword');
 
             if (email && password) {
-                // User is already logged in
-                autoLogin(email,password);
+                autoLogin(email, password);
             }
             document.getElementById('registerBtn').addEventListener('click', registerUser);
             document.getElementById('loginBtn').addEventListener('click', loginUser);
             document.getElementById('backBtn').addEventListener('click', logout);
             document.getElementById('saveBtn').addEventListener('click', addBalance);
-            document.getElementById('deleteBtn').addEventListener('click', deleteAllBalances);
-            document.getElementById('withdrawalBtn').addEventListener('click', withdrawBalance); // Added event listener for withdrawal
+            document.getElementById('withdrawalBtn').addEventListener('click', withdrawBalance);
+            document.getElementById('scanRoutingBtn').addEventListener('click', scanRoutingNumber); 
+            document.getElementById('toggleRoutingBtn').addEventListener('click', toggleRoutingNumber); 
         });
 
-        async function autoLogin(email,password) {
+        async function autoLogin(email, password) {
             document.getElementById('emailInput').value = email;
-            document.getElementById('passwordInput').value = password; // Pre-fill email input
-            await loginUser(); // Attempt to log in
+            document.getElementById('passwordInput').value = password; 
+            await loginUser();
         }
 
         async function registerUser() {
@@ -256,7 +186,6 @@
 
             // Email validation regex
             const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            
             if (!emailPattern.test(email)) {
                 alert('Please enter a valid email address.');
                 return;
@@ -265,14 +194,12 @@
             const userRef = ref(storage, 'users/' + email.replace('.', ',') + '.json');
 
             try {
-                // Check if user already exists
-                const url = await getDownloadURL(userRef);
-                // If we reach this point, the user already exists
+                await getDownloadURL(userRef);
                 alert('An account with this email already exists. Please use a different email.');
             } catch (error) {
                 if (error.code === 'storage/object-not-found') {
-                    // User does not exist, proceed with registration
-                    const userData = { email, password, balance: 0, transactions: [] };
+                    const routingNumber = generateUniqueRoutingNumber(); 
+                    const userData = { email, password, balance: 0, transactions: [], routingNumber: routingNumber }; 
                     await uploadString(userRef, JSON.stringify(userData));
                     alert('Registration successful! Please log in.');
                 } else {
@@ -295,9 +222,11 @@
                     document.getElementById('authContainer').style.display = 'none';
                     document.getElementById('bankingContainer').style.display = 'block';
                     loadBalance(userData);
-                    localStorage.setItem('userEmail', email); // Store email in local storage
+                    localStorage.setItem('userEmail', email);
                     localStorage.setItem('userPassword', password); 
                     document.getElementById('loggedInMessage').textContent = `Logged in as: ${email}`;
+                    document.getElementById('routingNumberDisplay').textContent = `Your Routing Number: ${userData.routingNumber}`;
+                    document.getElementById('routingNumberDisplay').style.display = 'block'; // Show routing number
                 } else {
                     alert('Invalid email or password.');
                 }
@@ -306,87 +235,8 @@
             }
         }
 
-        async function loadBalance(userData) {
-            document.getElementById('balanceDisplay').textContent = `Current Balance: $${userData.balance}`;
-            updateTransactionList(userData.transactions);
-        }
-
-        async function sendEmail(email, amount) {
-            const templateParams = {
-                to_email: email,
-                amount: amount,
-                
-            };
-
-            // Select template based on transaction type
-
-            try {
-                const response = await emailjs.send('service_8y32elk', 'template_deposit', templateParams);
-                console.log('Email sent successfully:', response);
-            } catch (error) {
-                console.error('Failed to send email:', error);
-            }
-        }
-        async function sendEmailW(email, amount) {
-            const templateParams = {
-                to_email: email,
-                amount: amount,
-                
-            };
-
-            // Select template based on transaction type
-
-            try {
-                const response = await emailjs.send('service_8y32elk', 'template_withdraw', templateParams);
-                console.log('Email sent successfully:', response);
-            } catch (error) {
-                console.error('Failed to send email:', error);
-            }
-        }
-        async function withdrawBalance() {
-            const user = document.getElementById('emailInput').value.replace('.', ',');
-            const withdrawalInput = parseFloat(document.getElementById('withdrawalAmountInput').value);
-
-            if (isNaN(withdrawalInput) || withdrawalInput <= 0) {
-                alert('Please enter a valid withdrawal amount.');
-                return;
-            }
-
-            const userRef = ref(storage, 'users/' + user + '.json');
-
-            try {
-                const url = await getDownloadURL(userRef);
-                const response = await fetch(url);
-                const userData = await response.json();
-
-                if (userData.balance < withdrawalInput) {
-                    alert('Insufficient funds for this withdrawal.');
-                    return;
-                }
-
-                userData.balance -= withdrawalInput;
-                userData.transactions.push(`Withdrew: $${withdrawalInput}`);
-                await uploadString(userRef, JSON.stringify(userData));
-
-                alert(`Withdrawal successful! New balance: $${userData.balance}`);
-                document.getElementById('balanceDisplay').textContent = `Current Balance: $${userData.balance}`;
-                updateTransactionList(userData.transactions);
-                sendEmailW(userData.email, withdrawalInput); // Send email on withdrawal
-
-            } catch (error) {
-                alert('Error while processing withdrawal. Please try again.');
-            }
-        }
-
-        function updateTransactionList(transactions) {
-            const transactionList = document.getElementById('transactionList');
-            transactionList.innerHTML = ''; // Clear existing list
-            transactions.forEach(transaction => {
-                const transactionItem = document.createElement('div');
-                transactionItem.className = 'transaction';
-                transactionItem.textContent = transaction;
-                transactionList.appendChild(transactionItem);
-            });
+        function loadBalance(userData) {
+            document.getElementById('balanceDisplay').textContent = `Balance: $${userData.balance.toFixed(2)}`;
         }
 
         async function addBalance() {
@@ -433,25 +283,23 @@
         alert('Please enter a valid amount.');
     }
 }
+        async function withdrawBalance() {
+            const amount = parseFloat(document.getElementById('withdrawalInput').value);
+            if (isNaN(amount) || amount <= 0) {
+                alert('Please enter a valid amount.');
+                return;
+            }
 
-        async function deleteAllBalances() {
-            const user = document.getElementById('emailInput').value.replace('.', ',');
-            const userRef = ref(storage, 'users/' + user + '.json');
-
-            try {
-                const url = await getDownloadURL(userRef);
-                const response = await fetch(url);
-                const userData = await response.json();
-
-                userData.balance = 0;
-                userData.transactions = [];
+            const email = localStorage.getItem('userEmail');
+            const userRef = ref(storage, 'users/' + email.replace('.', ',') + '.json');
+            const response = await fetch(await getDownloadURL(userRef));
+            const userData = await response.json();
+            if (userData.balance >= amount) {
+                userData.balance -= amount;
                 await uploadString(userRef, JSON.stringify(userData));
-
-                alert('All balances deleted successfully.');
-                document.getElementById('balanceDisplay').textContent = `Current Balance: $${userData.balance}`;
-                updateTransactionList(userData.transactions);
-            } catch (error) {
-                alert('Error while deleting balances. Please try again.');
+                loadBalance(userData);
+            } else {
+                alert('Insufficient funds.');
             }
         }
 
@@ -460,49 +308,109 @@
             localStorage.removeItem('userPassword');
             document.getElementById('authContainer').style.display = 'block';
             document.getElementById('bankingContainer').style.display = 'none';
-            document.getElementById('loggedInMessage').textContent = ''; // Clear logged-in message
+            document.getElementById('loggedInMessage').textContent = '';
+            document.getElementById('routingNumberDisplay').style.display = 'none'; // Hide routing number
+            document.getElementById('emailInput').value = '';
+            document.getElementById('passwordInput').value = '';
+        }
+
+        function generateUniqueRoutingNumber() {
+            return Math.floor(100000000 + Math.random() * 900000000).toString(); // Generate a random 9-digit routing number
+        }
+
+        function toggleRoutingNumber() {
+            const routingDisplay = document.getElementById('routingNumberDisplay');
+            if (routingDisplay.style.display === 'none') {
+                routingDisplay.style.display = 'block';
+            } else {
+                routingDisplay.style.display = 'none';
+            }
+        }
+
+        async function scanRoutingNumber() {
+            const routingNumber = prompt('Enter the routing number of the account you want to transfer to:');
+            if (!routingNumber) return;
+
+            const amount = parseFloat(prompt('Enter the amount you want to transfer:'));
+            if (isNaN(amount) || amount <= 0) {
+                alert('Please enter a valid amount.');
+                return;
+            }
+
+            const email = localStorage.getItem('userEmail');
+            const userRef = ref(storage, 'users/' + email.replace('.', ',') + '.json');
+            const response = await fetch(await getDownloadURL(userRef));
+            const userData = await response.json();
+
+            if (userData.balance < amount) {
+                alert('Insufficient funds for this transfer.');
+                return;
+            }
+
+            // Find the recipient's account by routing number
+            const allUsersRef = ref(storage, 'users/');
+            const allUsers = await getAllUsers(allUsersRef);
+            const recipient = allUsers.find(user => user.routingNumber === routingNumber);
+
+            if (recipient) {
+                // Deduct amount from sender
+                userData.balance -= amount;
+                await uploadString(userRef, JSON.stringify(userData));
+
+                // Add amount to recipient
+                const recipientRef = ref(storage, 'users/' + recipient.email.replace('.', ',') + '.json');
+                recipient.balance += amount;
+                await uploadString(recipientRef, JSON.stringify(recipient));
+
+                alert(`Successfully transferred $${amount.toFixed(2)} to account with routing number ${routingNumber}.`);
+                loadBalance(userData);
+            } else {
+                alert('No account found with that routing number.');
+            }
+        }
+
+        async function getAllUsers(usersRef) {
+            const allUsers = [];
+            const userFiles = await listAll(usersRef);
+            for (const file of userFiles.items) {
+                const response = await fetch(await getDownloadURL(file));
+                const userData = await response.json();
+                allUsers.push(userData);
+            }
+            return allUsers;
         }
     </script>
 </head>
 <body>
-    <div class="container">
-        <h1>Banking System</h1>
-
-        <div id="authContainer">
-            <div class="input-container">
-                <i class="fas fa-envelope"></i>
-                <input type="email" id="emailInput" placeholder="Email">
-            </div>
-            <div class="input-container">
-                <i class="fas fa-lock"></i>
-                <input type="password" id="passwordInput" placeholder="Password">
-            </div>
-            <button id="registerBtn"><i class="fas fa-user-plus"></i> Register</button>
-            <button id="loginBtn"><i class="fas fa-sign-in-alt"></i> Log In</button>
+    <div id="loggedInMessage"></div>
+    <div id="authContainer" class="container">
+        <h1>Banking App</h1>
+        <div class="input-container">
+            <i class="fas fa-user"></i>
+            <input type="email" id="emailInput" placeholder="Email" required>
         </div>
-
-        <div id="bankingContainer" style="display: none;">
-            <div class="response" id="balanceDisplay"></div>
-            <div class="transaction-list" id="transactionList"></div>
-            <div class="input-container">
-                <i class="fas fa-dollar-sign"></i>
-                <input type="number" id="amountInput" placeholder="Amount to Deposit">
-            </div>
-            <button id="saveBtn"><i class="fas fa-save"></i> Save Balance</button>
-
-            <div class="input-container">
-                <i class="fas fa-money-bill-wave"></i>
-                <input type="number" id="withdrawalAmountInput" placeholder="Amount to Withdraw">
-            </div>
-            <button id="withdrawalBtn"><i class="fas fa-hand-holding-usd"></i> Withdraw</button>
-
-            <button id="deleteBtn" class="back-button"><i class="fas fa-trash"></i> Delete All Balances</button>
-            <button id="backBtn" class="back-button"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        <div class="input-container">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="passwordInput" placeholder="Password" required>
         </div>
-
-        <div id="loggedInMessage"></div>
+        <button id="registerBtn">Register</button>
+        <button id="loginBtn">Login</button>
     </div>
-
-    <script src="script.js"></script>
+    <div id="bankingContainer" class="container" style="display: none;">
+        <h1>Welcome Back!</h1>
+        <div id="routingNumberDisplay"></div>
+        <div class="response" id="balanceDisplay">Balance: $0.00</div>
+        <div class="input-container">
+            <input type="number" id="amountInput" placeholder="Deposit Amount">
+        </div>
+        <button id="saveBtn">Deposit</button>
+        <div class="input-container">
+            <input type="number" id="withdrawalInput" placeholder="Withdrawal Amount">
+        </div>
+        <button id="withdrawalBtn">Withdraw</button>
+        <button id="backBtn">Logout</button>
+        <button id="toggleRoutingBtn">Show/Hide Routing Number</button>
+        <button id="scanRoutingBtn">Scan Routing Number</button>
+    </div>
 </body>
 </html>
